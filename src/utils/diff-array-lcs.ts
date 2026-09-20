@@ -5,9 +5,9 @@ import getType from './get-type';
 import stringify from './stringify';
 
 import isEqual from './is-equal';
-import shallowSimilarity from './shallow-similarity';
 import concat from './concat';
 import prettyAppendLines from './pretty-append-lines';
+import lcsOps from './lcs-ops';
 import { addArrayClosingBrackets, addArrayOpeningBrackets, addMaxDepthPlaceholder } from './array-bracket-utils';
 
 const lcs = (
@@ -18,61 +18,19 @@ const lcs = (
   level: number,
   options: DifferOptions,
 ): [DiffResult[], DiffResult[]] => {
-  const f = Array(arrLeft.length + 1).fill(0).map(() => Array(arrRight.length + 1).fill(0));
-  const backtrack = Array(arrLeft.length + 1).fill(0).map(() => Array(arrRight.length + 1).fill(0));
-
-  for (let i = 1; i <= arrLeft.length; i++) {
-    backtrack[i][0] = 'up';
-  }
-  for (let j = 1; j <= arrRight.length; j++) {
-    backtrack[0][j] = 'left';
-  }
-  for (let i = 1; i <= arrLeft.length; i++) {
-    for (let j = 1; j <= arrRight.length; j++) {
-      const typeI = getType(arrLeft[i - 1]);
-      const typeJ = getType(arrRight[j - 1]);
-      if (typeI === typeJ && (typeI === 'array' || typeI === 'object')) {
-        if (options.recursiveEqual) {
-          if (
-            isEqual(arrLeft[i - 1], arrRight[j - 1], options) ||
-            shallowSimilarity(arrLeft[i - 1], arrRight[j - 1]) > 0.5
-          ) {
-            f[i][j] = f[i - 1][j - 1] + 1;
-            backtrack[i][j] = 'diag';
-          } else if (f[i - 1][j] >= f[i][j - 1]) {
-            f[i][j] = f[i - 1][j];
-            backtrack[i][j] = 'up';
-          } else {
-            f[i][j] = f[i][j - 1];
-            backtrack[i][j] = 'left';
-          }
-        } else {
-          // this is a diff-specific logic, when 2 values are both arrays or both objects, the
-          // algorithm should assume they are equal in order to diff recursively later
-          f[i][j] = f[i - 1][j - 1] + 1;
-          backtrack[i][j] = 'diag';
-        }
-      } else if (isEqual(arrLeft[i - 1], arrRight[j - 1], options)) {
-        f[i][j] = f[i - 1][j - 1] + 1;
-        backtrack[i][j] = 'diag';
-      } else if (f[i - 1][j] >= f[i][j - 1]) {
-        f[i][j] = f[i - 1][j];
-        backtrack[i][j] = 'up';
-      } else {
-        f[i][j] = f[i][j - 1];
-        backtrack[i][j] = 'left';
-      }
-    }
-  }
-
+  // The alignment is computed by `lcsOps` with linear auxiliary memory; the
+  // returned op sequence is bit-identical to the historical full-matrix
+  // backtracking path, so every rendering decision below is preserved.
+  const ops = lcsOps(arrLeft, arrRight, options);
   let i = arrLeft.length;
   let j = arrRight.length;
   let tLeft: DiffResult[] = [];
   let tRight: DiffResult[] = [];
   // this is a backtracking process, all new lines should be unshifted to the result, not
   // pushed to the result
-  while (i > 0 || j > 0) {
-    if (backtrack[i][j] === 'diag') {
+  for (let k = 0; k < ops.length; k++) {
+    const op = ops[k];
+    if (op === 'diag') {
       const type = getType(arrLeft[i - 1]);
       if (
         options.recursiveEqual &&
@@ -123,8 +81,10 @@ const lcs = (
       }
       i--;
       j--;
-    } else if (backtrack[i][j] === 'up') {
-      if (options.showModifications && i > 1 && backtrack[i - 1][j] === 'left') {
+    } else if (op === 'up') {
+      // `ops[k + 1]` is the step the matrix algorithm would have read from
+      // `backtrack[i - 1][j]`, so the modification-pairing check is unchanged.
+      if (options.showModifications && i > 1 && ops[k + 1] === 'left') {
         const typeLeft = getType(arrLeft[i - 1]);
         const typeRight = getType(arrRight[j - 1]);
         if (typeLeft === typeRight) {
@@ -170,6 +130,9 @@ const lcs = (
         }
         i--;
         j--;
+        // the modification pairing consumes the paired `left` step as well,
+        // exactly like the matrix walk skipping over `backtrack[i - 1][j]`
+        k++;
       } else {
         const removedLines = stringify(arrLeft[i - 1], undefined, 1, undefined, options.undefinedBehavior).split('\n');
         for (let i = removedLines.length - 1; i >= 0; i--) {

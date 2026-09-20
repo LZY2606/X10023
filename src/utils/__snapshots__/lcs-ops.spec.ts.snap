@@ -1,0 +1,13 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`lcs-ops: linear-memory LCS vs matrix oracle (shared contract) keeps deterministic alignment on alternating repeats 1`] = `"1ba91a80"`;
+
+exports[`lcs-ops: linear-memory LCS vs matrix oracle (shared contract) keeps deterministic alignment on duplicate-heavy repeats 1`] = `"69c79266"`;
+
+exports[`lcs-ops: linear-memory LCS vs matrix oracle (shared contract) stays linear-memory on large arrays and records peak array length 1`] = `
+{
+  "matrixCells": 2253001,
+  "ops": 1503,
+  "peakArrayLength": 3000,
+}
+`;
